@@ -46,6 +46,32 @@ public class CorbaNewsClient {
         }
     }
 
+    /**
+     * Publishes a news item via CORBA. The server generates the id when {@code id} is null/blank,
+     * so the gateway always passes an empty string and relies on auto-generation.
+     */
+    public synchronized NewsRow publishNews(String title, String content, String date) throws Exception {
+        ensureConnected();
+        try {
+            NewsItem item = new NewsItem("", safe(title), safe(content), safe(date));
+            cachedService.publishNews(item);
+            return new NewsRow("", item.title, item.content, item.date);
+        } catch (Exception ex) {
+            cachedService = null;
+            throw ex;
+        }
+    }
+
+    public synchronized boolean deleteNews(String id) throws Exception {
+        ensureConnected();
+        try {
+            return cachedService.deleteNews(id == null ? "" : id);
+        } catch (Exception ex) {
+            cachedService = null;
+            throw ex;
+        }
+    }
+
     private void ensureConnected() throws Exception {
         if (cachedService != null) {
             return;
@@ -70,5 +96,9 @@ public class CorbaNewsClient {
         cachedService = NewsServiceHelper.narrow(naming.resolve_str(serviceName));
         System.out.println("CORBA client connected to " + serviceName);
         System.out.println("Resolved IOR: " + orb.object_to_string(cachedService));
+    }
+
+    private static String safe(String value) {
+        return value == null ? "" : value;
     }
 }
