@@ -101,9 +101,9 @@ docker run -d --name corba-news-gateway --network corba-news-net -p 8095:8095 -e
 | `DOCKERHUB_TOKEN` | Docker Hub access token |
 | `GCP_SA_KEY` | Deploy to Cloud Run |
 | `GCP_PROJECT_ID` | GCP project id (e.g. same as Spring/Cloud Run services) |
-| `CORBA_NEWS_DB_URL` | JDBC URL to `corba_news` database |
-| `CORBA_NEWS_DB_USER` | DB username |
-| `CORBA_NEWS_DB_PASSWORD` | DB password |
+| `DB_URL` | JDBC URL to `corba_news` database |
+| `DB_USER` | DB username |
+| `DB_PASSWORD` | DB password |
 
 Optional: `GCP_REGION` (default `europe-west1`), `CORBA_CLOUD_RUN_SERVICE` (default `corba-news`), `DOCKERHUB_REPO_CORBA_NEWS` (default `corba-news` — create this repo on Docker Hub).
 
@@ -127,7 +127,7 @@ The players/comments backend toggle remains unchanged and does not affect news.
 
 - CD fails: `Set DOCKERHUB_USERNAME and DOCKERHUB_TOKEN`:
   - Add the same Docker Hub secrets used by `DWSC-backend` to this repo.
-- CD fails: `Set CORBA_NEWS_DB_URL, CORBA_NEWS_DB_USER, CORBA_NEWS_DB_PASSWORD`:
+- CD fails: `Set DB_URL, DB_USER, DB_PASSWORD`:
   - Add the DB connection secrets to the repo and re-run CD.
 - CD fails at GCE with `Compute Engine API` disabled:
   - Use default `cd.yml` (Cloud Run), or enable the API and run `cd-gce.yml` manually.
