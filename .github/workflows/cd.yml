@@ -21,9 +21,9 @@ env:
   GCP_REGION_NAME: ${{ secrets.GCP_REGION || vars.GCP_REGION || 'europe-west1' }}
   CLOUD_RUN_SERVICE: ${{ secrets.CORBA_CLOUD_RUN_SERVICE || vars.CORBA_CLOUD_RUN_SERVICE || 'corba-news' }}
   DOCKERHUB_REPO: ${{ secrets.DOCKERHUB_REPO_CORBA_NEWS || vars.DOCKERHUB_REPO_CORBA_NEWS || 'corba-news' }}
-  DB_URL: ${{ secrets.DB_URL }}
-  DB_USER: ${{ secrets.DB_USER }}
-  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+  DB_URL: jdbc:postgresql://34.79.190.145:5432/corba_news
+  DB_USER: admin-db-user
+  DB_PASSWORD: admin-0511
 
 jobs:
   deploy-cloud-run:
