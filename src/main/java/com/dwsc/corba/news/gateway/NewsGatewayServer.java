@@ -92,6 +92,8 @@ public final class NewsGatewayServer {
 
             writeJson(exchange, 404, Map.of("error", "Not found"));
         } catch (Exception ex) {
+            // Keep stack traces in Cloud Run logs to diagnose runtime CORBA wiring issues.
+            ex.printStackTrace(System.err);
             writeJson(
                     exchange,
                     503,
