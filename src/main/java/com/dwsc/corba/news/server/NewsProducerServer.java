@@ -53,6 +53,7 @@ public final class NewsProducerServer {
         System.out.printf("Naming host: %s%n", orbHost);
         System.out.printf("Naming port: %d%n", orbPort);
         System.out.printf("Service name: %s%n", serviceName);
+        System.out.printf("Published IOR: %s%n", orb.object_to_string(href));
         Runtime.getRuntime()
                 .addShutdownHook(
                         new Thread(

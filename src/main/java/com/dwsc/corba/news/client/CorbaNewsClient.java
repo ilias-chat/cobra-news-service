@@ -69,5 +69,6 @@ public class CorbaNewsClient {
         NamingContextExt naming = NamingContextExtHelper.narrow(namingRef);
         cachedService = NewsServiceHelper.narrow(naming.resolve_str(serviceName));
         System.out.println("CORBA client connected to " + serviceName);
+        System.out.println("Resolved IOR: " + orb.object_to_string(cachedService));
     }
 }
