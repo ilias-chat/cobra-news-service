@@ -1,11 +1,11 @@
 # CORBA News Service (`corba-news-service`)
 
-Standalone CORBA News subsystem for **Noticias de jugadores** with CORBA producer + REST gateway and PostgreSQL persistence.
+Standalone CORBA News subsystem for **Noticias de jugadores** with CORBA producer + REST gateway.
 
-1. `news-producer`: CORBA producer + `corba_news` PostgreSQL storage
+1. `news-producer`: CORBA producer + in-memory news store
 2. `news-gateway`: REST-to-CORBA adapter (`/api/news`)
 
-This subsystem is isolated from Node/Mongo and Spring player/comment databases (you can reuse the same Postgres server with a separate `corba_news` database).
+This subsystem is isolated from Node/Mongo and Spring player/comment databases.
 
 ## 1) Module contents
 
@@ -46,9 +46,6 @@ Default env:
 - `ORB_HOST=0.0.0.0`
 - `ORB_PORT=1050`
 - `CORBA_SERVICE_NAME=NewsService`
-- `DB_URL=jdbc:postgresql://127.0.0.1:5432/corba_news`
-- `DB_USER=postgres`
-- `DB_PASSWORD=postgres`
 
 ### Process B: Gateway
 
@@ -101,9 +98,6 @@ docker run -d --name corba-news-gateway --network corba-news-net -p 8095:8095 -e
 | `DOCKERHUB_TOKEN` | Docker Hub access token |
 | `GCP_SA_KEY` | Deploy to Cloud Run |
 | `GCP_PROJECT_ID` | GCP project id (e.g. same as Spring/Cloud Run services) |
-| `DB_URL` | JDBC URL to `corba_news` database |
-| `DB_USER` | DB username |
-| `DB_PASSWORD` | DB password |
 
 Optional: `GCP_REGION` (default `europe-west1`), `CORBA_CLOUD_RUN_SERVICE` (default `corba-news`), `DOCKERHUB_REPO_CORBA_NEWS` (default `corba-news` — create this repo on Docker Hub).
 
@@ -127,8 +121,6 @@ The players/comments backend toggle remains unchanged and does not affect news.
 
 - CD fails: `Set DOCKERHUB_USERNAME and DOCKERHUB_TOKEN`:
   - Add the same Docker Hub secrets used by `DWSC-backend` to this repo.
-- CD fails: `Set DB_URL, DB_USER, DB_PASSWORD`:
-  - Add the DB connection secrets to the repo and re-run CD.
 - CD fails at GCE with `Compute Engine API` disabled:
   - Use default `cd.yml` (Cloud Run), or enable the API and run `cd-gce.yml` manually.
 - `503 CORBA news service unavailable` from gateway:

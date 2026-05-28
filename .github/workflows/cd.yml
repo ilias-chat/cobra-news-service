@@ -21,9 +21,6 @@ env:
   GCP_REGION_NAME: ${{ secrets.GCP_REGION || vars.GCP_REGION || 'europe-west1' }}
   CLOUD_RUN_SERVICE: ${{ secrets.CORBA_CLOUD_RUN_SERVICE || vars.CORBA_CLOUD_RUN_SERVICE || 'corba-news' }}
   DOCKERHUB_REPO: ${{ secrets.DOCKERHUB_REPO_CORBA_NEWS || vars.DOCKERHUB_REPO_CORBA_NEWS || 'corba-news' }}
-  DB_URL: jdbc:postgresql://34.79.190.145:5432/corba_news
-  DB_USER: admin-db-user
-  DB_PASSWORD: admin-0511
 
 jobs:
   deploy-cloud-run:
@@ -41,10 +38,6 @@ jobs:
           fi
           if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ] || [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
             echo "::error::Set DOCKERHUB_USERNAME and DOCKERHUB_TOKEN (same as DWSC-backend CD)."
-            exit 1
-          fi
-          if [ -z "${DB_URL}" ] || [ -z "${DB_USER}" ] || [ -z "${DB_PASSWORD}" ]; then
-            echo "::error::Set DB_URL, DB_USER, DB_PASSWORD."
             exit 1
           fi
 
@@ -92,10 +85,6 @@ jobs:
             --memory=2Gi
             --cpu=2
             --timeout=300
-          env_vars: |-
-            DB_URL=${{ env.DB_URL }}
-            DB_USER=${{ env.DB_USER }}
-            DB_PASSWORD=${{ env.DB_PASSWORD }}
 
       - name: Health check and print Ionic URL
         run: |

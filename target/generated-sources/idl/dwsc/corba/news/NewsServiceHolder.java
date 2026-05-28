@@ -4,7 +4,7 @@ package dwsc.corba.news;
  * Generated from IDL interface "NewsService".
  *
  * @author JacORB IDL compiler V 3.9
- * @version generated at 28 May 2026, 14:03:02
+ * @version generated at 28 May 2026, 14:16:34
  */
 
 public final class NewsServiceHolder	implements org.omg.CORBA.portable.Streamable{
