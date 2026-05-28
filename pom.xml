@@ -57,17 +57,20 @@
                         <id>generate-corba-stubs</id>
                         <phase>generate-sources</phase>
                         <goals>
-                            <goal>java</goal>
+                            <goal>exec</goal>
                         </goals>
                         <configuration>
-                            <mainClass>org.jacorb.idl.parser</mainClass>
+                            <executable>java</executable>
+                            <classpathScope>compile</classpathScope>
                             <arguments>
+                                <argument>-classpath</argument>
+                                <classpath/>
+                                <argument>org.jacorb.idl.parser</argument>
                                 <argument>-d</argument>
                                 <argument>${project.build.directory}/generated-sources/idl</argument>
                                 <argument>-I${project.basedir}/idl</argument>
                                 <argument>${project.basedir}/idl/NewsService.idl</argument>
                             </arguments>
-                            <classpathScope>compile</classpathScope>
                         </configuration>
                     </execution>
                 </executions>
@@ -88,6 +91,23 @@
                             <sources>
                                 <source>${project.build.directory}/generated-sources/idl</source>
                             </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-shade-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>shade</goal>
+                        </goals>
+                        <configuration>
+                            <createDependencyReducedPom>false</createDependencyReducedPom>
                         </configuration>
                     </execution>
                 </executions>
