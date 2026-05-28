@@ -82,26 +82,33 @@ docker run -d --name corba-news-producer --network corba-news-net -e ORB_HOST=0.
 docker run -d --name corba-news-gateway --network corba-news-net -p 8095:8095 -e ORB_HOST=corba-news-producer -e ORB_PORT=1050 -e GATEWAY_HTTP_PORT=8095 corba-news-gateway:local
 ```
 
-## 5) Compute Engine deployment (GitHub Actions)
+## 5) CI/CD (GitHub Actions)
 
-Workflow: `DWSC-backend/.github/workflows/deploy-corba-news-gce.yml`
+Workflows in this repository:
 
-Required secrets/variables:
+| Workflow | File | Trigger |
+|----------|------|---------|
+| CI | `.github/workflows/ci.yml` | PRs and pushes to non-`main` branches — runs `mvn clean package` (IDL + compile) |
+| CD | `.github/workflows/cd.yml` | Push to `main` / `master`, or manual **Run workflow** — builds Docker images, deploys to GCE, health-checks gateway |
 
-- `GCP_SA_KEY`
-- `GCP_PROJECT_ID`
-- optional: `GCP_REGION`, `GCP_ZONE`, `GCE_CORBA_VM_NAME`, `CORBA_NEWS_GATEWAY_PORT`
+Required GitHub **secrets** (repository settings → Secrets and variables → Actions):
 
-What the workflow does:
+- `GCP_SA_KEY` — JSON key for a service account with Artifact Registry/GCR push, Compute Engine admin, and firewall admin
+- `GCP_PROJECT_ID` — GCP project id (can be a **variable** instead)
 
-- Builds and pushes producer/gateway Docker images to GCR
-- Creates VM if missing
-- Creates/updates firewall rule for gateway HTTP port
-- Installs Docker on VM if needed
-- Writes and enables systemd services:
-  - `corba-news-producer.service`
-  - `corba-news-gateway.service`
-- Runs `/health` and `/api/news` checks on VM external IP
+Optional secrets or **variables**:
+
+- `GCP_REGION` (default `europe-west1`)
+- `GCP_ZONE` (default `europe-west1-b`)
+- `GCE_CORBA_VM_NAME` (default `corba-news-vm`)
+- `GCE_MACHINE_TYPE` (default `e2-medium`)
+- `CORBA_NEWS_GATEWAY_PORT` (default `8095`)
+
+After a successful CD run, set Ionic production env:
+
+`standaloneCorbaNewsBaseUrl: 'http://<VM_EXTERNAL_IP>:8095'`
+
+If this module lives inside the monorepo `DWSC-backend`, you can still use `DWSC-backend/.github/workflows/deploy-corba-news-gce.yml` (manual dispatch) instead of pushing from this standalone repo.
 
 ## 6) Ionic integration
 

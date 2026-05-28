@@ -4,7 +4,7 @@ package dwsc.corba.news;
  * Generated from IDL alias "NewsList".
  *
  * @author JacORB IDL compiler V 3.9
- * @version generated at 28 May 2026, 04:22:58
+ * @version generated at 28 May 2026, 06:24:35
  */
 
 public abstract class NewsListHelper
