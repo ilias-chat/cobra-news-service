@@ -6,7 +6,7 @@ import org.omg.PortableServer.POA;
  * Generated from IDL interface "NewsService".
  *
  * @author JacORB IDL compiler V 3.9
- * @version generated at 28 May 2026, 11:21:02
+ * @version generated at 28 May 2026, 13:18:07
  */
 
 public class NewsServicePOATie

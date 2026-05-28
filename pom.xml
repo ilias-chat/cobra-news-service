@@ -26,11 +26,6 @@
             <version>${jacorb.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.glassfish.corba</groupId>
-            <artifactId>glassfish-corba-omgapi</artifactId>
-            <version>4.2.5</version>
-        </dependency>
-        <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
             <version>2.11.0</version>
