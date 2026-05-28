@@ -38,7 +38,8 @@ public final class NewsProducerServer {
                 ORB.init(
                         new String[] {
                             "-ORBInitialHost", orbHost,
-                            "-ORBInitialPort", String.valueOf(orbPort)
+                            "-ORBInitialPort", String.valueOf(orbPort),
+                            "-ORBInitRef", "NameService=corbaloc::" + orbHost + ":" + orbPort + "/NameService"
                         },
                         null);
 
