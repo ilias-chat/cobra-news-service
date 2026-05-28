@@ -93,8 +93,22 @@ Workflows in this repository:
 
 Required GitHub **secrets** (repository settings → Secrets and variables → Actions):
 
-- `GCP_SA_KEY` — JSON key for a service account with **Compute Engine Admin** (create VM, SSH, SCP) and firewall permissions. Container Registry / Artifact Registry push is **not** required (images are transferred directly to the VM).
+- `GCP_SA_KEY` — JSON key for a service account (see GCP setup below)
 - `GCP_PROJECT_ID` — GCP project id (can be a **variable** instead)
+
+### One-time GCP setup (required before CD succeeds)
+
+1. **Enable Compute Engine API** for your project:  
+   [Enable compute.googleapis.com](https://console.cloud.google.com/apis/library/compute.googleapis.com) → **Enable** → wait 2–3 minutes.
+
+2. **Service account roles** (IAM → Service Accounts → your deploy SA → Permissions):
+
+   | Role | Why |
+   |------|-----|
+   | Compute Admin (`roles/compute.admin`) | Create VM, firewall, SSH, SCP |
+   | Service Usage Admin (`roles/serviceusage.serviceUsageAdmin`) | Optional: let CD enable APIs automatically |
+
+   Container Registry / Artifact Registry is **not** required (images are copied to the VM via SCP).
 
 Optional secrets or **variables**:
 
@@ -120,6 +134,10 @@ The players/comments backend toggle remains unchanged and does not affect news.
 
 ## 7) Troubleshooting
 
+- GitHub Actions fails at **Create VM** with `Compute Engine API has not been used` / `SERVICE_DISABLED`:
+  - Enable the API in GCP Console (link above), then re-run the workflow.
+- GitHub Actions fails at **Build and push** with `artifactregistry.repositories.uploadArtifacts` denied:
+  - Use the current `cd.yml` (SCP deploy); you do not need GCR push permissions.
 - `503 CORBA news service unavailable` from gateway:
   - producer container not running
   - wrong `ORB_HOST`/`ORB_PORT` between gateway and producer
