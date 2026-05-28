@@ -12,6 +12,13 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Standalone REST gateway that translates HTTP JSON calls into CORBA calls.
@@ -22,6 +29,8 @@ public final class NewsGatewayServer {
     private static final int DEFAULT_ORB_PORT = 1050;
     private static final String DEFAULT_SERVICE_NAME = "NewsService";
     private static final int DEFAULT_HTTP_PORT = 8095;
+    private static final int CORBA_TIMEOUT_SECONDS = 10;
+    private static final ExecutorService CORBA_EXECUTOR = Executors.newCachedThreadPool();
 
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
 
@@ -68,7 +77,7 @@ public final class NewsGatewayServer {
         String path = exchange.getRequestURI().getPath();
         try {
             if ("/api/news".equals(path) || "/api/news/".equals(path)) {
-                List<NewsRow> rows = corbaClient.listNews();
+                List<NewsRow> rows = listNewsWithTimeout(corbaClient);
                 writeJson(exchange, 200, rows);
                 return;
             }
@@ -79,7 +88,7 @@ public final class NewsGatewayServer {
                     writeJson(exchange, 400, Map.of("error", "Missing id"));
                     return;
                 }
-                List<NewsRow> rows = corbaClient.listNews();
+                List<NewsRow> rows = listNewsWithTimeout(corbaClient);
                 for (NewsRow row : rows) {
                     if (id.equals(row.id())) {
                         writeJson(exchange, 200, row);
@@ -102,6 +111,29 @@ public final class NewsGatewayServer {
                             "CORBA news service unavailable",
                             "details",
                             ex.getMessage() == null ? "Unknown error" : ex.getMessage()));
+        }
+    }
+
+    private static List<NewsRow> listNewsWithTimeout(CorbaNewsClient corbaClient) throws Exception {
+        try {
+            return CompletableFuture.supplyAsync(
+                            () -> {
+                                try {
+                                    return corbaClient.listNews();
+                                } catch (Exception e) {
+                                    throw new CompletionException(e);
+                                }
+                            },
+                            CORBA_EXECUTOR)
+                    .get(CORBA_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (TimeoutException timeout) {
+            throw new IllegalStateException("Timed out waiting for CORBA response", timeout);
+        } catch (ExecutionException executionException) {
+            Throwable cause = executionException.getCause();
+            if (cause instanceof Exception exception) {
+                throw exception;
+            }
+            throw new IllegalStateException("CORBA call failed", executionException);
         }
     }
 
