@@ -88,8 +88,8 @@ Workflows in this repository:
 
 | Workflow | File | Trigger |
 |----------|------|---------|
-| CI | `.github/workflows/ci.yml` | PRs and pushes to non-`main` branches — runs `mvn clean package` (IDL + compile) |
-| CD | `.github/workflows/cd.yml` | Push to `main` / `master`, or manual **Run workflow** — builds Docker images, deploys to GCE, health-checks gateway |
+| CI | `.github/workflows/ci.yml` | Every push and PR — runs `mvn clean package` (IDL + compile) |
+| CD | `.github/workflows/cd.yml` | Every push (any branch), or manual **Run workflow** — builds Docker images, deploys to GCE, health-checks gateway |
 
 Required GitHub **secrets** (repository settings → Secrets and variables → Actions):
 

@@ -1,27 +1,25 @@
-name: CD
+name: CORBA News CD
 
 on:
   push:
-    branches: [main, master]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-env:
-  GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}
-  GCP_REGION_NAME: ${{ secrets.GCP_REGION || vars.GCP_REGION || 'europe-west1' }}
-  GCP_ZONE_NAME: ${{ secrets.GCP_ZONE || vars.GCP_ZONE || 'europe-west1-b' }}
-  GCE_VM_NAME: ${{ secrets.GCE_CORBA_VM_NAME || vars.GCE_CORBA_VM_NAME || 'corba-news-vm' }}
-  GCE_MACHINE_TYPE: ${{ secrets.GCE_MACHINE_TYPE || vars.GCE_MACHINE_TYPE || 'e2-medium' }}
-  GATEWAY_PORT: ${{ secrets.CORBA_NEWS_GATEWAY_PORT || vars.CORBA_NEWS_GATEWAY_PORT || '8095' }}
-  PRODUCER_IMAGE: gcr.io/${{ env.GCP_PROJECT }}/corba-news-producer
-  GATEWAY_IMAGE: gcr.io/${{ env.GCP_PROJECT }}/corba-news-gateway
-
 jobs:
   build-images:
     name: Build and push Docker images
     runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}
+      GCP_REGION_NAME: ${{ secrets.GCP_REGION || vars.GCP_REGION || 'europe-west1' }}
+      GCP_ZONE_NAME: ${{ secrets.GCP_ZONE || vars.GCP_ZONE || 'europe-west1-b' }}
+      GCE_VM_NAME: ${{ secrets.GCE_CORBA_VM_NAME || vars.GCE_CORBA_VM_NAME || 'corba-news-vm' }}
+      GCE_MACHINE_TYPE: ${{ secrets.GCE_MACHINE_TYPE || vars.GCE_MACHINE_TYPE || 'e2-medium' }}
+      GATEWAY_PORT: ${{ secrets.CORBA_NEWS_GATEWAY_PORT || vars.CORBA_NEWS_GATEWAY_PORT || '8095' }}
+      PRODUCER_IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}/corba-news-producer
+      GATEWAY_IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}/corba-news-gateway
     steps:
       - uses: actions/checkout@v4
 
@@ -76,6 +74,15 @@ jobs:
     name: Deploy to Compute Engine VM
     needs: build-images
     runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}
+      GCP_REGION_NAME: ${{ secrets.GCP_REGION || vars.GCP_REGION || 'europe-west1' }}
+      GCP_ZONE_NAME: ${{ secrets.GCP_ZONE || vars.GCP_ZONE || 'europe-west1-b' }}
+      GCE_VM_NAME: ${{ secrets.GCE_CORBA_VM_NAME || vars.GCE_CORBA_VM_NAME || 'corba-news-vm' }}
+      GCE_MACHINE_TYPE: ${{ secrets.GCE_MACHINE_TYPE || vars.GCE_MACHINE_TYPE || 'e2-medium' }}
+      GATEWAY_PORT: ${{ secrets.CORBA_NEWS_GATEWAY_PORT || vars.CORBA_NEWS_GATEWAY_PORT || '8095' }}
+      PRODUCER_IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}/corba-news-producer
+      GATEWAY_IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}/corba-news-gateway
     steps:
       - uses: actions/checkout@v4
 
