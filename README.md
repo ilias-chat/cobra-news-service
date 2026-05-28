@@ -89,11 +89,11 @@ Workflows in this repository:
 | Workflow | File | Trigger |
 |----------|------|---------|
 | CI | `.github/workflows/ci.yml` | Every push and PR — runs `mvn clean package` (IDL + compile) |
-| CD | `.github/workflows/cd.yml` | Every push (any branch), or manual **Run workflow** — builds Docker images, deploys to GCE, health-checks gateway |
+| CD | `.github/workflows/cd.yml` | Every push (any branch), or manual **Run workflow** — builds Docker images, copies them to the GCE VM, starts systemd services, health-checks gateway |
 
 Required GitHub **secrets** (repository settings → Secrets and variables → Actions):
 
-- `GCP_SA_KEY` — JSON key for a service account with Artifact Registry/GCR push, Compute Engine admin, and firewall admin
+- `GCP_SA_KEY` — JSON key for a service account with **Compute Engine Admin** (create VM, SSH, SCP) and firewall permissions. Container Registry / Artifact Registry push is **not** required (images are transferred directly to the VM).
 - `GCP_PROJECT_ID` — GCP project id (can be a **variable** instead)
 
 Optional secrets or **variables**:

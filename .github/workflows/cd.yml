@@ -4,12 +4,16 @@ on:
   push:
   workflow_dispatch:
 
+concurrency:
+  group: corba-news-cd-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
-  build-images:
-    name: Build and push Docker images
+  build-and-deploy:
+    name: Build images and deploy to GCE
     runs-on: ubuntu-latest
     env:
       GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}
@@ -18,8 +22,9 @@ jobs:
       GCE_VM_NAME: ${{ secrets.GCE_CORBA_VM_NAME || vars.GCE_CORBA_VM_NAME || 'corba-news-vm' }}
       GCE_MACHINE_TYPE: ${{ secrets.GCE_MACHINE_TYPE || vars.GCE_MACHINE_TYPE || 'e2-medium' }}
       GATEWAY_PORT: ${{ secrets.CORBA_NEWS_GATEWAY_PORT || vars.CORBA_NEWS_GATEWAY_PORT || '8095' }}
-      PRODUCER_IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}/corba-news-producer
-      GATEWAY_IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}/corba-news-gateway
+      IMAGE_TAG: ${{ github.sha }}
+      PRODUCER_IMAGE: corba-news-producer:${{ github.sha }}
+      GATEWAY_IMAGE: corba-news-gateway:${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -44,57 +49,33 @@ jobs:
         with:
           project_id: ${{ env.GCP_PROJECT }}
 
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker --quiet
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push producer image
+      - name: Build producer image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/news-producer.Dockerfile
-          push: true
-          tags: |
-            ${{ env.PRODUCER_IMAGE }}:latest
-            ${{ env.PRODUCER_IMAGE }}:${{ github.sha }}
+          push: false
+          load: true
+          tags: ${{ env.PRODUCER_IMAGE }}
 
-      - name: Build and push gateway image
+      - name: Build gateway image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/news-gateway.Dockerfile
-          push: true
-          tags: |
-            ${{ env.GATEWAY_IMAGE }}:latest
-            ${{ env.GATEWAY_IMAGE }}:${{ github.sha }}
+          push: false
+          load: true
+          tags: ${{ env.GATEWAY_IMAGE }}
 
-  deploy-gce:
-    name: Deploy to Compute Engine VM
-    needs: build-images
-    runs-on: ubuntu-latest
-    env:
-      GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}
-      GCP_REGION_NAME: ${{ secrets.GCP_REGION || vars.GCP_REGION || 'europe-west1' }}
-      GCP_ZONE_NAME: ${{ secrets.GCP_ZONE || vars.GCP_ZONE || 'europe-west1-b' }}
-      GCE_VM_NAME: ${{ secrets.GCE_CORBA_VM_NAME || vars.GCE_CORBA_VM_NAME || 'corba-news-vm' }}
-      GCE_MACHINE_TYPE: ${{ secrets.GCE_MACHINE_TYPE || vars.GCE_MACHINE_TYPE || 'e2-medium' }}
-      GATEWAY_PORT: ${{ secrets.CORBA_NEWS_GATEWAY_PORT || vars.CORBA_NEWS_GATEWAY_PORT || '8095' }}
-      PRODUCER_IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}/corba-news-producer
-      GATEWAY_IMAGE: gcr.io/${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}/corba-news-gateway
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up gcloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ env.GCP_PROJECT }}
+      - name: Export Docker images
+        run: |
+          set -euo pipefail
+          docker save "${PRODUCER_IMAGE}" | gzip > producer-image.tar.gz
+          docker save "${GATEWAY_IMAGE}" | gzip > gateway-image.tar.gz
+          ls -lh producer-image.tar.gz gateway-image.tar.gz
 
       - name: Create VM if missing
         run: |
@@ -138,7 +119,15 @@ jobs:
             --zone "${GCP_ZONE_NAME}" \
             --command 'command -v docker >/dev/null 2>&1 || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl enable docker && sudo systemctl start docker)'
 
-      - name: Deploy systemd units and start containers
+      - name: Copy images to VM
+        run: |
+          set -euo pipefail
+          gcloud compute scp producer-image.tar.gz gateway-image.tar.gz \
+            "${GCE_VM_NAME}:/tmp/" \
+            --project "${GCP_PROJECT}" \
+            --zone "${GCP_ZONE_NAME}"
+
+      - name: Load images and start systemd services
         run: |
           set -euo pipefail
           gcloud compute ssh "${GCE_VM_NAME}" \
@@ -146,8 +135,9 @@ jobs:
             --zone "${GCP_ZONE_NAME}" \
             --command "
               sudo bash -lc '
-              docker pull ${PRODUCER_IMAGE}:${{ github.sha }}
-              docker pull ${GATEWAY_IMAGE}:${{ github.sha }}
+              gunzip -c /tmp/producer-image.tar.gz | docker load
+              gunzip -c /tmp/gateway-image.tar.gz | docker load
+              rm -f /tmp/producer-image.tar.gz /tmp/gateway-image.tar.gz
 
               cat > /etc/systemd/system/corba-news-producer.service <<\"EOF\"
               [Unit]
@@ -161,7 +151,7 @@ jobs:
               ExecStartPre=-/usr/bin/docker rm -f corba-news-producer
               ExecStart=/usr/bin/docker run --name corba-news-producer --network corba-news-net \
                 -e ORB_HOST=0.0.0.0 -e ORB_PORT=1050 -e CORBA_SERVICE_NAME=NewsService \
-                ${PRODUCER_IMAGE}:${{ github.sha }}
+                ${PRODUCER_IMAGE}
               ExecStop=/usr/bin/docker stop corba-news-producer
               ExecStopPost=-/usr/bin/docker rm -f corba-news-producer
 
@@ -181,7 +171,7 @@ jobs:
               ExecStartPre=-/usr/bin/docker rm -f corba-news-gateway
               ExecStart=/usr/bin/docker run --name corba-news-gateway --network corba-news-net -p ${GATEWAY_PORT}:${GATEWAY_PORT} \
                 -e ORB_HOST=corba-news-producer -e ORB_PORT=1050 -e CORBA_SERVICE_NAME=NewsService -e GATEWAY_HTTP_PORT=${GATEWAY_PORT} \
-                ${GATEWAY_IMAGE}:${{ github.sha }}
+                ${GATEWAY_IMAGE}
               ExecStop=/usr/bin/docker stop corba-news-gateway
               ExecStopPost=-/usr/bin/docker rm -f corba-news-gateway
 
@@ -204,5 +194,12 @@ jobs:
             --zone "${GCP_ZONE_NAME}" \
             --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
           echo "Gateway external IP: ${IP}"
-          curl -fsS "http://${IP}:${GATEWAY_PORT}/health"
+          echo "Set Ionic standaloneCorbaNewsBaseUrl to: http://${IP}:${GATEWAY_PORT}"
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS "http://${IP}:${GATEWAY_PORT}/health"; then
+              break
+            fi
+            echo "Waiting for gateway... (${i}/10)"
+            sleep 10
+          done
           curl -fsS "http://${IP}:${GATEWAY_PORT}/api/news"
