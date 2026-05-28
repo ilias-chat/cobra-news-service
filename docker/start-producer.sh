@@ -6,7 +6,8 @@ ORB_PORT="${ORB_PORT:-1050}"
 CORBA_SERVICE_NAME="${CORBA_SERVICE_NAME:-NewsService}"
 
 echo "Starting CORBA naming service at ${ORB_HOST}:${ORB_PORT}"
-orbd -ORBInitialHost "${ORB_HOST}" -ORBInitialPort "${ORB_PORT}" &
+java -cp /app/app.jar org.jacorb.naming.NameServer \
+  -DOAPort="${ORB_PORT}" -DORBBindAddr="${ORB_HOST}" &
 
 echo "Starting CORBA producer service '${CORBA_SERVICE_NAME}'"
 exec java -cp /app/app.jar com.dwsc.corba.news.server.NewsProducerServer

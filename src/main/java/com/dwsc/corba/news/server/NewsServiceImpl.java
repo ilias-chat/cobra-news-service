@@ -7,9 +7,9 @@ import java.util.UUID;
 
 public class NewsServiceImpl extends NewsServicePOA {
 
-    private final InMemoryNewsStore store;
+    private final NewsStore store;
 
-    public NewsServiceImpl(InMemoryNewsStore store) {
+    public NewsServiceImpl(NewsStore store) {
         this.store = store;
     }
 

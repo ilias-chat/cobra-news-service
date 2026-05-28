@@ -10,7 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Thread-safe in-memory news storage, isolated from Mongo/Postgres databases.
  */
-public class InMemoryNewsStore {
+public class InMemoryNewsStore implements NewsStore {
 
     private final Map<String, NewsRecord> byId = new ConcurrentHashMap<>();
 
@@ -18,20 +18,24 @@ public class InMemoryNewsStore {
         seed();
     }
 
+    @Override
     public List<NewsRecord> list() {
         List<NewsRecord> rows = new ArrayList<>(byId.values());
         rows.sort(Comparator.comparing(NewsRecord::date).reversed());
         return rows;
     }
 
+    @Override
     public NewsRecord get(String id) {
         return byId.get(id);
     }
 
+    @Override
     public void put(NewsRecord record) {
         byId.put(record.id(), record);
     }
 
+    @Override
     public boolean delete(String id) {
         return byId.remove(id) != null;
     }

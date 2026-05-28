@@ -4,7 +4,7 @@ package dwsc.corba.news;
  * Generated from IDL struct "NewsItem".
  *
  * @author JacORB IDL compiler V 3.9
- * @version generated at 28 May 2026, 06:50:38
+ * @version generated at 28 May 2026, 11:21:02
  */
 
 public final class NewsItemHolder

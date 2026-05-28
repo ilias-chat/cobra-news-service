@@ -5,6 +5,8 @@ C:\Users\ilias\Desktop\UAL\THE PROJECT\corba-news-service\src\main\java\com\dwsc
 C:\Users\ilias\Desktop\UAL\THE PROJECT\corba-news-service\src\main\java\com\dwsc\corba\news\server\NewsProducerServer.java
 C:\Users\ilias\Desktop\UAL\THE PROJECT\corba-news-service\src\main\java\com\dwsc\corba\news\server\NewsRecord.java
 C:\Users\ilias\Desktop\UAL\THE PROJECT\corba-news-service\src\main\java\com\dwsc\corba\news\server\NewsServiceImpl.java
+C:\Users\ilias\Desktop\UAL\THE PROJECT\corba-news-service\src\main\java\com\dwsc\corba\news\server\NewsStore.java
+C:\Users\ilias\Desktop\UAL\THE PROJECT\corba-news-service\src\main\java\com\dwsc\corba\news\server\PostgresNewsStore.java
 C:\Users\ilias\Desktop\UAL\THE PROJECT\corba-news-service\target\generated-sources\idl\dwsc\corba\news\_NewsServiceStub.java
 C:\Users\ilias\Desktop\UAL\THE PROJECT\corba-news-service\target\generated-sources\idl\dwsc\corba\news\NewsItem.java
 C:\Users\ilias\Desktop\UAL\THE PROJECT\corba-news-service\target\generated-sources\idl\dwsc\corba\news\NewsItemHelper.java

@@ -1,3 +1,8 @@
+# CD: build all-in-one image → Docker Hub → Cloud Run (same pattern as DWSC-backend).
+#
+# Required secrets: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN, GCP_SA_KEY, GCP_PROJECT_ID
+# Optional variable: GCP_REGION (default europe-west1), CORBA_CLOUD_RUN_SERVICE (default corba-news)
+
 name: CORBA News CD
 
 on:
@@ -11,26 +16,25 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}
+  GCP_REGION_NAME: ${{ secrets.GCP_REGION || vars.GCP_REGION || 'europe-west1' }}
+  CLOUD_RUN_SERVICE: ${{ secrets.CORBA_CLOUD_RUN_SERVICE || vars.CORBA_CLOUD_RUN_SERVICE || 'corba-news' }}
+  DOCKERHUB_REPO: ${{ secrets.DOCKERHUB_REPO_CORBA_NEWS || vars.DOCKERHUB_REPO_CORBA_NEWS || 'corba-news' }}
+  DB_URL: ${{ secrets.CORBA_NEWS_DB_URL }}
+  DB_USER: ${{ secrets.CORBA_NEWS_DB_USER }}
+  DB_PASSWORD: ${{ secrets.CORBA_NEWS_DB_PASSWORD }}
+
 jobs:
-  build-and-deploy:
-    name: Build images and deploy to GCE
+  deploy-cloud-run:
+    name: Build and deploy to Cloud Run
     runs-on: ubuntu-latest
-    env:
-      CLOUDSDK_CORE_DISABLE_PROMPTS: "1"
-      GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}
-      GCP_REGION_NAME: ${{ secrets.GCP_REGION || vars.GCP_REGION || 'europe-west1' }}
-      GCP_ZONE_NAME: ${{ secrets.GCP_ZONE || vars.GCP_ZONE || 'europe-west1-b' }}
-      GCE_VM_NAME: ${{ secrets.GCE_CORBA_VM_NAME || vars.GCE_CORBA_VM_NAME || 'corba-news-vm' }}
-      GCE_MACHINE_TYPE: ${{ secrets.GCE_MACHINE_TYPE || vars.GCE_MACHINE_TYPE || 'e2-medium' }}
-      GATEWAY_PORT: ${{ secrets.CORBA_NEWS_GATEWAY_PORT || vars.CORBA_NEWS_GATEWAY_PORT || '8095' }}
-      IMAGE_TAG: ${{ github.sha }}
-      PRODUCER_IMAGE: corba-news-producer:${{ github.sha }}
-      GATEWAY_IMAGE: corba-news-gateway:${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate GCP configuration
+      - name: Validate configuration
         run: |
+          set -euo pipefail
           if [ -z "${GCP_PROJECT}" ]; then
             echo "::error::Set GCP_PROJECT_ID (secret or variable)."
             exit 1
@@ -39,184 +43,79 @@ jobs:
             echo "::error::Set GCP_SA_KEY secret."
             exit 1
           fi
+          if [ -z "${{ secrets.DOCKERHUB_USERNAME }}" ] || [ -z "${{ secrets.DOCKERHUB_TOKEN }}" ]; then
+            echo "::error::Set DOCKERHUB_USERNAME and DOCKERHUB_TOKEN (same as DWSC-backend CD)."
+            exit 1
+          fi
+          if [ -z "${DB_URL}" ] || [ -z "${DB_USER}" ] || [ -z "${DB_PASSWORD}" ]; then
+            echo "::error::Set CORBA_NEWS_DB_URL, CORBA_NEWS_DB_USER, CORBA_NEWS_DB_PASSWORD."
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          user=$(printf '%s' "$DOCKERHUB_USERNAME" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          token=$(printf '%s' "$DOCKERHUB_TOKEN" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          echo "DOCKERHUB_USER=$user" >> "$GITHUB_ENV"
+          printf '%s' "$token" | docker login -u "$user" --password-stdin docker.io
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/news-all.Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKERHUB_USER }}/${{ env.DOCKERHUB_REPO }}:latest
+            ${{ env.DOCKERHUB_USER }}/${{ env.DOCKERHUB_REPO }}:${{ github.sha }}
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Set up gcloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
         with:
+          service: ${{ env.CLOUD_RUN_SERVICE }}
+          region: ${{ env.GCP_REGION_NAME }}
           project_id: ${{ env.GCP_PROJECT }}
+          image: ${{ env.DOCKERHUB_USER }}/${{ env.DOCKERHUB_REPO }}:${{ github.sha }}
+          flags: >-
+            --allow-unauthenticated
+            --port=8095
+            --min-instances=1
+            --memory=2Gi
+            --cpu=2
+            --timeout=300
+          env_vars: |-
+            DB_URL=${{ env.DB_URL }}
+            DB_USER=${{ env.DB_USER }}
+            DB_PASSWORD=${{ env.DB_PASSWORD }}
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build producer image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/news-producer.Dockerfile
-          push: false
-          load: true
-          tags: ${{ env.PRODUCER_IMAGE }}
-
-      - name: Build gateway image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: docker/news-gateway.Dockerfile
-          push: false
-          load: true
-          tags: ${{ env.GATEWAY_IMAGE }}
-
-      - name: Export Docker images
+      - name: Health check and print Ionic URL
         run: |
           set -euo pipefail
-          docker save "${PRODUCER_IMAGE}" | gzip > producer-image.tar.gz
-          docker save "${GATEWAY_IMAGE}" | gzip > gateway-image.tar.gz
-          ls -lh producer-image.tar.gz gateway-image.tar.gz
-
-      - name: Enable Compute Engine API
-        run: |
-          set -euo pipefail
-          echo "Ensuring compute.googleapis.com is enabled on ${GCP_PROJECT}..."
-          if ! gcloud services enable compute.googleapis.com --project="${GCP_PROJECT}"; then
-            echo "::error::Compute Engine API is disabled and could not be enabled automatically."
-            echo "::error::In GCP Console (as project Owner), open:"
-            echo "::error::https://console.cloud.google.com/apis/library/compute.googleapis.com?project=${GCP_PROJECT}"
-            echo "::error::Click Enable, wait 2-3 minutes, then re-run this workflow."
-            exit 1
-          fi
-          gcloud services list --enabled --project="${GCP_PROJECT}" \
-            --filter="config.name:compute.googleapis.com" \
-            --format="value(config.name)" | grep -q compute.googleapis.com
-
-      - name: Create VM if missing
-        run: |
-          set -euo pipefail
-          if gcloud compute instances describe "${GCE_VM_NAME}" --zone "${GCP_ZONE_NAME}" --project "${GCP_PROJECT}" >/dev/null 2>&1; then
-            echo "VM already exists: ${GCE_VM_NAME}"
-          else
-            gcloud compute instances create "${GCE_VM_NAME}" \
-              --project="${GCP_PROJECT}" \
-              --zone="${GCP_ZONE_NAME}" \
-              --machine-type="${GCE_MACHINE_TYPE}" \
-              --image-family=debian-12 \
-              --image-project=debian-cloud \
-              --tags=corba-news \
-              --scopes=cloud-platform \
-              --quiet
-          fi
-
-      - name: Ensure firewall rule for gateway port
-        run: |
-          set -euo pipefail
-          RULE="allow-corba-news-gateway"
-          if gcloud compute firewall-rules describe "${RULE}" --project "${GCP_PROJECT}" >/dev/null 2>&1; then
-            gcloud compute firewall-rules update "${RULE}" \
-              --project "${GCP_PROJECT}" \
-              --allow "tcp:${GATEWAY_PORT}" \
-              --target-tags=corba-news \
-              --source-ranges=0.0.0.0/0
-          else
-            gcloud compute firewall-rules create "${RULE}" \
-              --project="${GCP_PROJECT}" \
-              --allow "tcp:${GATEWAY_PORT}" \
-              --target-tags=corba-news \
-              --source-ranges=0.0.0.0/0
-          fi
-
-      - name: Install Docker on VM if missing
-        run: |
-          set -euo pipefail
-          gcloud compute ssh "${GCE_VM_NAME}" \
-            --project "${GCP_PROJECT}" \
-            --zone "${GCP_ZONE_NAME}" \
-            --command 'command -v docker >/dev/null 2>&1 || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl enable docker && sudo systemctl start docker)'
-
-      - name: Copy images to VM
-        run: |
-          set -euo pipefail
-          gcloud compute scp producer-image.tar.gz gateway-image.tar.gz \
-            "${GCE_VM_NAME}:/tmp/" \
-            --project "${GCP_PROJECT}" \
-            --zone "${GCP_ZONE_NAME}"
-
-      - name: Load images and start systemd services
-        run: |
-          set -euo pipefail
-          gcloud compute ssh "${GCE_VM_NAME}" \
-            --project "${GCP_PROJECT}" \
-            --zone "${GCP_ZONE_NAME}" \
-            --command "
-              sudo bash -lc '
-              gunzip -c /tmp/producer-image.tar.gz | docker load
-              gunzip -c /tmp/gateway-image.tar.gz | docker load
-              rm -f /tmp/producer-image.tar.gz /tmp/gateway-image.tar.gz
-
-              cat > /etc/systemd/system/corba-news-producer.service <<\"EOF\"
-              [Unit]
-              Description=Standalone CORBA News Producer Container
-              After=docker.service
-              Requires=docker.service
-
-              [Service]
-              Restart=always
-              ExecStartPre=-/usr/bin/docker network create corba-news-net
-              ExecStartPre=-/usr/bin/docker rm -f corba-news-producer
-              ExecStart=/usr/bin/docker run --name corba-news-producer --network corba-news-net \
-                -e ORB_HOST=0.0.0.0 -e ORB_PORT=1050 -e CORBA_SERVICE_NAME=NewsService \
-                ${PRODUCER_IMAGE}
-              ExecStop=/usr/bin/docker stop corba-news-producer
-              ExecStopPost=-/usr/bin/docker rm -f corba-news-producer
-
-              [Install]
-              WantedBy=multi-user.target
-              EOF
-
-              cat > /etc/systemd/system/corba-news-gateway.service <<\"EOF\"
-              [Unit]
-              Description=Standalone CORBA News Gateway Container
-              After=docker.service corba-news-producer.service
-              Requires=docker.service corba-news-producer.service
-
-              [Service]
-              Restart=always
-              ExecStartPre=-/usr/bin/docker network create corba-news-net
-              ExecStartPre=-/usr/bin/docker rm -f corba-news-gateway
-              ExecStart=/usr/bin/docker run --name corba-news-gateway --network corba-news-net -p ${GATEWAY_PORT}:${GATEWAY_PORT} \
-                -e ORB_HOST=corba-news-producer -e ORB_PORT=1050 -e CORBA_SERVICE_NAME=NewsService -e GATEWAY_HTTP_PORT=${GATEWAY_PORT} \
-                ${GATEWAY_IMAGE}
-              ExecStop=/usr/bin/docker stop corba-news-gateway
-              ExecStopPost=-/usr/bin/docker rm -f corba-news-gateway
-
-              [Install]
-              WantedBy=multi-user.target
-              EOF
-
-              systemctl daemon-reload
-              systemctl enable corba-news-producer.service corba-news-gateway.service
-              systemctl restart corba-news-producer.service
-              systemctl restart corba-news-gateway.service
-              '
-            "
-
-      - name: Health check gateway
-        run: |
-          set -euo pipefail
-          IP=$(gcloud compute instances describe "${GCE_VM_NAME}" \
-            --project "${GCP_PROJECT}" \
-            --zone "${GCP_ZONE_NAME}" \
-            --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
-          echo "Gateway external IP: ${IP}"
-          echo "Set Ionic standaloneCorbaNewsBaseUrl to: http://${IP}:${GATEWAY_PORT}"
-          for i in 1 2 3 4 5 6 7 8 9 10; do
-            if curl -fsS "http://${IP}:${GATEWAY_PORT}/health"; then
-              break
+          url="${{ steps.deploy.outputs.url }}"
+          base="${url%/}"
+          echo "Cloud Run URL: ${base}"
+          echo "Set Ionic standaloneCorbaNewsBaseUrl to: ${base}"
+          for i in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            if curl -fsS "${base}/health"; then
+              echo ""
+              curl -fsS "${base}/api/news"
+              exit 0
             fi
-            echo "Waiting for gateway... (${i}/10)"
+            echo "Waiting for service... (${i}/12)"
             sleep 10
           done
-          curl -fsS "http://${IP}:${GATEWAY_PORT}/api/news"
+          echo "::error::Gateway health check failed at ${base}/health"
+          exit 1

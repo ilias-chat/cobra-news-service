@@ -31,7 +31,11 @@ public final class NewsGatewayServer {
         String orbHost = env("ORB_HOST", DEFAULT_ORB_HOST);
         int orbPort = parseInt(env("ORB_PORT", String.valueOf(DEFAULT_ORB_PORT)), DEFAULT_ORB_PORT);
         String serviceName = env("CORBA_SERVICE_NAME", DEFAULT_SERVICE_NAME);
-        int httpPort = parseInt(env("GATEWAY_HTTP_PORT", String.valueOf(DEFAULT_HTTP_PORT)), DEFAULT_HTTP_PORT);
+        String httpPortRaw = System.getenv("PORT");
+        if (httpPortRaw == null || httpPortRaw.isBlank()) {
+            httpPortRaw = env("GATEWAY_HTTP_PORT", String.valueOf(DEFAULT_HTTP_PORT));
+        }
+        int httpPort = parseInt(httpPortRaw.trim(), DEFAULT_HTTP_PORT);
 
         CorbaNewsClient corbaClient = new CorbaNewsClient(orbHost, orbPort, serviceName);
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", httpPort), 0);

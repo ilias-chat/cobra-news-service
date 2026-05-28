@@ -20,6 +20,9 @@ public final class NewsProducerServer {
     private static final String DEFAULT_ORB_HOST = "0.0.0.0";
     private static final int DEFAULT_ORB_PORT = 1050;
     private static final String DEFAULT_SERVICE_NAME = "NewsService";
+    private static final String DEFAULT_DB_URL = "jdbc:postgresql://127.0.0.1:5432/corba_news";
+    private static final String DEFAULT_DB_USER = "postgres";
+    private static final String DEFAULT_DB_PASSWORD = "postgres";
 
     private NewsProducerServer() {}
 
@@ -27,6 +30,9 @@ public final class NewsProducerServer {
         String orbHost = env("ORB_HOST", DEFAULT_ORB_HOST);
         int orbPort = parseInt(env("ORB_PORT", String.valueOf(DEFAULT_ORB_PORT)), DEFAULT_ORB_PORT);
         String serviceName = env("CORBA_SERVICE_NAME", DEFAULT_SERVICE_NAME);
+        String dbUrl = env("DB_URL", DEFAULT_DB_URL);
+        String dbUser = env("DB_USER", DEFAULT_DB_USER);
+        String dbPassword = env("DB_PASSWORD", DEFAULT_DB_PASSWORD);
 
         ORB orb =
                 ORB.init(
@@ -39,7 +45,7 @@ public final class NewsProducerServer {
         POA rootPoa = POAHelper.narrow(orb.resolve_initial_references("RootPOA"));
         rootPoa.the_POAManager().activate();
 
-        NewsServiceImpl servant = new NewsServiceImpl(new InMemoryNewsStore());
+        NewsServiceImpl servant = new NewsServiceImpl(new PostgresNewsStore(dbUrl, dbUser, dbPassword));
         org.omg.CORBA.Object ref = rootPoa.servant_to_reference(servant);
         NewsService href = NewsServiceHelper.narrow(ref);
 
@@ -52,6 +58,7 @@ public final class NewsProducerServer {
         System.out.printf("Naming host: %s%n", orbHost);
         System.out.printf("Naming port: %d%n", orbPort);
         System.out.printf("Service name: %s%n", serviceName);
+        System.out.printf("DB url: %s%n", dbUrl);
         Runtime.getRuntime()
                 .addShutdownHook(
                         new Thread(

@@ -1,0 +1,122 @@
+# Optional GCE deploy (manual only). Requires Compute Engine API enabled on the GCP project.
+# Default CD uses Cloud Run — see cd.yml.
+
+name: CORBA News CD (GCE)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CLOUDSDK_CORE_DISABLE_PROMPTS: "1"
+  GCP_PROJECT: ${{ secrets.GCP_PROJECT_ID || vars.GCP_PROJECT_ID }}
+  GCP_ZONE_NAME: ${{ secrets.GCP_ZONE || vars.GCP_ZONE || 'europe-west1-b' }}
+  GCE_VM_NAME: ${{ secrets.GCE_CORBA_VM_NAME || vars.GCE_CORBA_VM_NAME || 'corba-news-vm' }}
+  GCE_MACHINE_TYPE: ${{ secrets.GCE_MACHINE_TYPE || vars.GCE_MACHINE_TYPE || 'e2-medium' }}
+  GATEWAY_PORT: ${{ secrets.CORBA_NEWS_GATEWAY_PORT || vars.CORBA_NEWS_GATEWAY_PORT || '8095' }}
+  PRODUCER_IMAGE: corba-news-producer:${{ github.sha }}
+  GATEWAY_IMAGE: corba-news-gateway:${{ github.sha }}
+
+jobs:
+  deploy-gce:
+    name: SCP deploy to Compute Engine VM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate GCP configuration
+        run: |
+          if [ -z "${GCP_PROJECT}" ] || [ -z "${{ secrets.GCP_SA_KEY }}" ]; then
+            echo "::error::Set GCP_PROJECT_ID and GCP_SA_KEY."
+            exit 1
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.GCP_PROJECT }}
+
+      - name: Verify Compute Engine API is enabled
+        run: |
+          set -euo pipefail
+          if ! gcloud services list --enabled --project="${GCP_PROJECT}" \
+            --filter="config.name:compute.googleapis.com" \
+            --format="value(config.name)" | grep -q compute.googleapis.com; then
+            echo "::error::Enable Compute Engine API first:"
+            echo "::error::https://console.cloud.google.com/apis/library/compute.googleapis.com?project=${GCP_PROJECT}"
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build producer image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/news-producer.Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.PRODUCER_IMAGE }}
+
+      - name: Build gateway image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/news-gateway.Dockerfile
+          push: false
+          load: true
+          tags: ${{ env.GATEWAY_IMAGE }}
+
+      - name: Export Docker images
+        run: |
+          docker save "${PRODUCER_IMAGE}" | gzip > producer-image.tar.gz
+          docker save "${GATEWAY_IMAGE}" | gzip > gateway-image.tar.gz
+
+      - name: Create VM if missing
+        run: |
+          set -euo pipefail
+          if ! gcloud compute instances describe "${GCE_VM_NAME}" --zone "${GCP_ZONE_NAME}" --project "${GCP_PROJECT}" >/dev/null 2>&1; then
+            gcloud compute instances create "${GCE_VM_NAME}" \
+              --project="${GCP_PROJECT}" --zone="${GCP_ZONE_NAME}" \
+              --machine-type="${GCE_MACHINE_TYPE}" \
+              --image-family=debian-12 --image-project=debian-cloud \
+              --tags=corba-news --scopes=cloud-platform --quiet
+          fi
+
+      - name: Ensure firewall rule
+        run: |
+          set -euo pipefail
+          RULE="allow-corba-news-gateway"
+          if gcloud compute firewall-rules describe "${RULE}" --project "${GCP_PROJECT}" >/dev/null 2>&1; then
+            gcloud compute firewall-rules update "${RULE}" --project "${GCP_PROJECT}" \
+              --allow "tcp:${GATEWAY_PORT}" --target-tags=corba-news --source-ranges=0.0.0.0/0
+          else
+            gcloud compute firewall-rules create "${RULE}" --project="${GCP_PROJECT}" \
+              --allow "tcp:${GATEWAY_PORT}" --target-tags=corba-news --source-ranges=0.0.0.0/0
+          fi
+
+      - name: Install Docker on VM
+        run: |
+          gcloud compute ssh "${GCE_VM_NAME}" --project "${GCP_PROJECT}" --zone "${GCP_ZONE_NAME}" \
+            --command 'command -v docker >/dev/null 2>&1 || (sudo apt-get update -y && sudo apt-get install -y docker.io && sudo systemctl enable docker && sudo systemctl start docker)'
+
+      - name: Copy and load images on VM
+        run: |
+          set -euo pipefail
+          gcloud compute scp producer-image.tar.gz gateway-image.tar.gz \
+            "${GCE_VM_NAME}:/tmp/" --project "${GCP_PROJECT}" --zone "${GCP_ZONE_NAME}"
+          gcloud compute ssh "${GCE_VM_NAME}" --project "${GCP_PROJECT}" --zone "${GCP_ZONE_NAME}" \
+            --command "sudo bash -lc 'gunzip -c /tmp/producer-image.tar.gz | docker load && gunzip -c /tmp/gateway-image.tar.gz | docker load'"
+
+      - name: Start systemd services
+        run: |
+          gcloud compute ssh "${GCE_VM_NAME}" --project "${GCP_PROJECT}" --zone "${GCP_ZONE_NAME}" \
+            --command "sudo bash -lc 'systemctl restart corba-news-producer corba-news-gateway || true'"

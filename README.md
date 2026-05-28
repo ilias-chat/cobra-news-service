@@ -1,11 +1,11 @@
 # CORBA News Service (`corba-news-service`)
 
-Standalone CORBA News subsystem for **Noticias de jugadores** with two independent runtimes:
+Standalone CORBA News subsystem for **Noticias de jugadores** with CORBA producer + REST gateway and PostgreSQL persistence.
 
-1. `news-producer`: CORBA producer + in-memory store
+1. `news-producer`: CORBA producer + `corba_news` PostgreSQL storage
 2. `news-gateway`: REST-to-CORBA adapter (`/api/news`)
 
-This subsystem is isolated from Node/Mongo and Spring player/comment databases.
+This subsystem is isolated from Node/Mongo and Spring player/comment databases (you can reuse the same Postgres server with a separate `corba_news` database).
 
 ## 1) Module contents
 
@@ -46,6 +46,9 @@ Default env:
 - `ORB_HOST=0.0.0.0`
 - `ORB_PORT=1050`
 - `CORBA_SERVICE_NAME=NewsService`
+- `DB_URL=jdbc:postgresql://127.0.0.1:5432/corba_news`
+- `DB_USER=postgres`
+- `DB_PASSWORD=postgres`
 
 ### Process B: Gateway
 
@@ -84,45 +87,33 @@ docker run -d --name corba-news-gateway --network corba-news-net -p 8095:8095 -e
 
 ## 5) CI/CD (GitHub Actions)
 
-Workflows in this repository:
-
 | Workflow | File | Trigger |
 |----------|------|---------|
-| CI | `.github/workflows/ci.yml` | Every push and PR — runs `mvn clean package` (IDL + compile) |
-| CD | `.github/workflows/cd.yml` | Every push (any branch), or manual **Run workflow** — builds Docker images, copies them to the GCE VM, starts systemd services, health-checks gateway |
+| CI | `.github/workflows/ci.yml` | Every push / PR — `mvn clean package` |
+| **CD (default)** | `.github/workflows/cd.yml` | Every push — Docker Hub → **Cloud Run** (all-in-one CORBA + REST gateway) |
+| CD (GCE) | `.github/workflows/cd-gce.yml` | Manual only — needs Compute Engine API enabled |
 
-Required GitHub **secrets** (repository settings → Secrets and variables → Actions):
+### Required GitHub secrets (same project as DWSC-backend)
 
-- `GCP_SA_KEY` — JSON key for a service account (see GCP setup below)
-- `GCP_PROJECT_ID` — GCP project id (can be a **variable** instead)
+| Secret | Purpose |
+|--------|---------|
+| `DOCKERHUB_USERNAME` | Push image (copy from DWSC-backend repo secrets) |
+| `DOCKERHUB_TOKEN` | Docker Hub access token |
+| `GCP_SA_KEY` | Deploy to Cloud Run |
+| `GCP_PROJECT_ID` | GCP project id (e.g. same as Spring/Cloud Run services) |
+| `CORBA_NEWS_DB_URL` | JDBC URL to `corba_news` database |
+| `CORBA_NEWS_DB_USER` | DB username |
+| `CORBA_NEWS_DB_PASSWORD` | DB password |
 
-### One-time GCP setup (required before CD succeeds)
+Optional: `GCP_REGION` (default `europe-west1`), `CORBA_CLOUD_RUN_SERVICE` (default `corba-news`), `DOCKERHUB_REPO_CORBA_NEWS` (default `corba-news` — create this repo on Docker Hub).
 
-1. **Enable Compute Engine API** for your project:  
-   [Enable compute.googleapis.com](https://console.cloud.google.com/apis/library/compute.googleapis.com) → **Enable** → wait 2–3 minutes.
+After a successful CD run, the workflow prints the URL. Set Ionic:
 
-2. **Service account roles** (IAM → Service Accounts → your deploy SA → Permissions):
+`standaloneCorbaNewsBaseUrl: 'https://corba-news-….run.app'` (HTTPS, no port)
 
-   | Role | Why |
-   |------|-----|
-   | Compute Admin (`roles/compute.admin`) | Create VM, firewall, SSH, SCP |
-   | Service Usage Admin (`roles/serviceusage.serviceUsageAdmin`) | Optional: let CD enable APIs automatically |
+### GCE (optional, syllabus / VM requirement)
 
-   Container Registry / Artifact Registry is **not** required (images are copied to the VM via SCP).
-
-Optional secrets or **variables**:
-
-- `GCP_REGION` (default `europe-west1`)
-- `GCP_ZONE` (default `europe-west1-b`)
-- `GCE_CORBA_VM_NAME` (default `corba-news-vm`)
-- `GCE_MACHINE_TYPE` (default `e2-medium`)
-- `CORBA_NEWS_GATEWAY_PORT` (default `8095`)
-
-After a successful CD run, set Ionic production env:
-
-`standaloneCorbaNewsBaseUrl: 'http://<VM_EXTERNAL_IP>:8095'`
-
-If this module lives inside the monorepo `DWSC-backend`, you can still use `DWSC-backend/.github/workflows/deploy-corba-news-gce.yml` (manual dispatch) instead of pushing from this standalone repo.
+Only if you need a VM: enable [Compute Engine API](https://console.cloud.google.com/apis/library/compute.googleapis.com), then run workflow **CORBA News CD (GCE)** manually.
 
 ## 6) Ionic integration
 
@@ -134,10 +125,12 @@ The players/comments backend toggle remains unchanged and does not affect news.
 
 ## 7) Troubleshooting
 
-- GitHub Actions fails at **Create VM** with `Compute Engine API has not been used` / `SERVICE_DISABLED`:
-  - Enable the API in GCP Console (link above), then re-run the workflow.
-- GitHub Actions fails at **Build and push** with `artifactregistry.repositories.uploadArtifacts` denied:
-  - Use the current `cd.yml` (SCP deploy); you do not need GCR push permissions.
+- CD fails: `Set DOCKERHUB_USERNAME and DOCKERHUB_TOKEN`:
+  - Add the same Docker Hub secrets used by `DWSC-backend` to this repo.
+- CD fails: `Set CORBA_NEWS_DB_URL, CORBA_NEWS_DB_USER, CORBA_NEWS_DB_PASSWORD`:
+  - Add the DB connection secrets to the repo and re-run CD.
+- CD fails at GCE with `Compute Engine API` disabled:
+  - Use default `cd.yml` (Cloud Run), or enable the API and run `cd-gce.yml` manually.
 - `503 CORBA news service unavailable` from gateway:
   - producer container not running
   - wrong `ORB_HOST`/`ORB_PORT` between gateway and producer
