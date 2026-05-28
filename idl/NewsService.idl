@@ -1,0 +1,21 @@
+module dwsc {
+  module corba {
+    module news {
+      struct NewsItem {
+        string id;
+        string title;
+        string content;
+        string date;
+      };
+
+      typedef sequence<NewsItem> NewsList;
+
+      interface NewsService {
+        NewsList listNews();
+        NewsItem getNews(in string id);
+        void publishNews(in NewsItem news);
+        boolean deleteNews(in string id);
+      };
+    };
+  };
+};

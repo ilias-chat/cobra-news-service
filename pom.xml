@@ -1,0 +1,97 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.dwsc</groupId>
+    <artifactId>corba-news-service</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>CORBA News Service</name>
+    <description>Standalone CORBA producer/consumer for player news.</description>
+
+    <properties>
+        <maven.compiler.release>17</maven.compiler.release>
+        <jacorb.version>3.9</jacorb.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.jacorb</groupId>
+            <artifactId>jacorb</artifactId>
+            <version>${jacorb.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jacorb</groupId>
+            <artifactId>jacorb-idl-compiler</artifactId>
+            <version>${jacorb.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.glassfish.corba</groupId>
+            <artifactId>glassfish-corba-omgapi</artifactId>
+            <version>4.2.5</version>
+        </dependency>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.11.0</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.13.0</version>
+                <configuration>
+                    <release>${maven.compiler.release}</release>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>generate-corba-stubs</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>org.jacorb.idl.parser</mainClass>
+                            <arguments>
+                                <argument>-d</argument>
+                                <argument>${project.build.directory}/generated-sources/idl</argument>
+                                <argument>-I${project.basedir}/idl</argument>
+                                <argument>${project.basedir}/idl/NewsService.idl</argument>
+                            </arguments>
+                            <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>add-generated-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.build.directory}/generated-sources/idl</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
